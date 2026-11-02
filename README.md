@@ -1,37 +1,38 @@
 # data-librarian
 
 One code base for several Slack "librarian" apps that monitor and accession sequencing
-data, for example **PIRL Librarian** (`/pirl-status`, ...) and **IGI Librarian**
-(`/igi-status`, ...). Each Slack app is an *instance* with its own TOML file in `instances/`.
+data, for example **IGI Librarian** (`/igi-status`, ...) and **PIRL Librarian**
+(`/pirl-status`, ...). Each Slack app is an *instance* with its own TOML file in `instances/`.
+The default instance for this repository is IGI Librarian (`instances/igi.toml`).
 
 ## Instances
 
-| Setting | Example (`instances/pirl.toml`) | Effect |
+| Setting | Example (`instances/igi.toml`) | Effect |
 |---|---|---|
-| `name` | `PIRL Librarian` | Slack app name, help/home headers, assistant name |
-| `label` | `PIRL` | Short name in messages ("PIRL registry status") |
-| `command_prefix` | `pirl` | `/pirl-status`, `/pirl-sequencing-accession`, `/pirl-reference-accession`, `/pirl-help` |
-| `id_prefix` | `pirl` | Dataset IDs `pirl_<fields>`, reference IDs `pirl_ref_<fields>` |
-| `[registry] dir` | `/datastore/.../test_registry` | Registry root (override with `DATA_LIBRARIAN_REGISTRY_DIR`) |
-| `[registry] sequencing_tsv`, `references_tsv`, `database` | `pirl_sequencing.tsv`, ... | Registry file names (default `sequencing.tsv`, `references.tsv`, `registry.sqlite3`) |
-| `[commands]` | `status = "/pirl-whatsnew"` | Optional per-command overrides |
+| `name` | `IGI Librarian` | Slack app name, help/home headers, assistant name |
+| `label` | `IGI` | Short name in messages ("IGI registry status") |
+| `command_prefix` | `igi` | `/igi-status`, `/igi-sequencing-accession`, `/igi-reference-accession`, `/igi-help` |
+| `id_prefix` | `igi` | Dataset IDs `igi_<fields>`, reference IDs `igi_ref_<fields>` |
+| `[registry] dir` | `/path/to/igi/registry` | Registry root (override with `DATA_LIBRARIAN_REGISTRY_DIR`) |
+| `[registry] sequencing_tsv`, `references_tsv`, `database` | `sequencing.tsv`, ... | Registry file names (default `sequencing.tsv`, `references.tsv`, `registry.sqlite3`) |
+| `[commands]` | `status = "/igi-whatsnew"` | Optional per-command overrides |
 
 Run an instance by setting `DATA_LIBRARIAN_INSTANCE` (usually in `.env`):
 
 ```sh
-DATA_LIBRARIAN_INSTANCE=instances/pirl.toml python3 app.py
+DATA_LIBRARIAN_INSTANCE=instances/igi.toml python3 app.py
 ```
 
 Each instance is a **separate Slack app** with its own tokens. Slack reads slash commands
 from the app manifest, so regenerate it after changing names or commands:
 
 ```sh
-python -m instance.manifest instances/pirl.toml -o manifest.json      # app linked to this checkout
-python -m instance.manifest instances/igi.toml  -o manifests/igi.json # paste into a new app at api.slack.com
+python -m instance.manifest instances/igi.toml  -o manifest.json        # default (IGI) app for this checkout
+python -m instance.manifest instances/pirl.toml -o manifests/pirl.json # another instance: paste into its app at api.slack.com
 ```
 
 To run two instances from one checkout, give each its own secrets file and select it with
-`DATA_LIBRARIAN_ENV_FILE=.env.igi python3 app.py`.
+`DATA_LIBRARIAN_ENV_FILE=.env.pirl python3 app.py`.
 
 ---
 

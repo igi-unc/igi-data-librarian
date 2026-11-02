@@ -12,7 +12,7 @@ from registry import RegistryService
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_pirl_instance_keeps_existing_commands_and_files():
+def test_pirl_example_instance_keeps_its_commands_and_files():
     pirl = load_instance(ROOT / "instances" / "pirl.toml")
     assert pirl.name == "PIRL Librarian"
     assert pirl.commands == {
@@ -31,15 +31,20 @@ def test_pirl_instance_keeps_existing_commands_and_files():
 def test_igi_instance_uses_its_own_commands():
     igi = load_instance(ROOT / "instances" / "igi.toml")
     assert igi.name == "IGI Librarian"
-    assert igi.command("status") == "/igi-status"
-    assert igi.command("help") == "/igi-help"
+    assert igi.commands == {
+        "status": "/igi-status",
+        "sequencing-accession": "/igi-sequencing-accession",
+        "reference-accession": "/igi-reference-accession",
+        "help": "/igi-help",
+    }
+    assert igi.id_prefix == "igi"
     with pytest.raises(RuntimeError, match="No registry directory"):
         RegistryService.from_instance(igi)
 
 
-def test_committed_manifest_matches_pirl_instance():
+def test_committed_manifest_matches_default_igi_instance():
     committed = json.loads((ROOT / "manifest.json").read_text())
-    assert committed == build_manifest(load_instance(ROOT / "instances" / "pirl.toml"))
+    assert committed == build_manifest(load_instance(ROOT / "instances" / "igi.toml"))
 
 
 def test_manifest_commands_follow_instance():

@@ -1,15 +1,15 @@
 {
   "display_information": {
-    "name": "PIRL Librarian",
-    "description": "Accession and monitor PIRL sequencing datasets and references"
+    "name": "IGI Librarian",
+    "description": "Accession and monitor IGI sequencing datasets and references"
   },
   "features": {
     "agent_view": {
-      "agent_description": "Monitor sequencing files, explain registry status, and prepare reviewed PIRL accessions.",
+      "agent_description": "Monitor sequencing files, explain registry status, and prepare reviewed IGI accessions.",
       "suggested_prompts": [
         {
           "title": "Registry status",
-          "message": "What is the current PIRL registry status?"
+          "message": "What is the current IGI registry status?"
         },
         {
           "title": "New files",
@@ -23,28 +23,28 @@
       "messages_tab_read_only_enabled": false
     },
     "bot_user": {
-      "display_name": "pirl-librarian",
+      "display_name": "igi-librarian",
       "always_online": true
     },
     "slash_commands": [
       {
-        "command": "/pirl-status",
-        "description": "Show new and missing PIRL files",
+        "command": "/igi-status",
+        "description": "Show new and missing IGI files",
         "should_escape": false
       },
       {
-        "command": "/pirl-sequencing-accession",
+        "command": "/igi-sequencing-accession",
         "description": "Review and accession sequencing files",
         "should_escape": false
       },
       {
-        "command": "/pirl-reference-accession",
+        "command": "/igi-reference-accession",
         "description": "Review and accession reference files",
         "should_escape": false
       },
       {
-        "command": "/pirl-help",
-        "description": "Show PIRL Librarian commands",
+        "command": "/igi-help",
+        "description": "Show IGI Librarian commands",
         "should_escape": false
       }
     ]

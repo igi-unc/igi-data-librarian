@@ -1,7 +1,8 @@
 # IGI Librarian: data-librarian instance for the IGI Slack app.
 # Select it with DATA_LIBRARIAN_INSTANCE=instances/igi.toml.
-# Generate its Slack manifest with:
-#   python -m instance.manifest instances/igi.toml -o manifests/igi.json
+# This is the default instance for this repository. After changing names or commands,
+# regenerate the Slack manifest:
+#   python -m instance.manifest instances/igi.toml -o manifest.json
 
 name = "IGI Librarian"
 label = "IGI"

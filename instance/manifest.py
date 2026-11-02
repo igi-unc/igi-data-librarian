@@ -1,8 +1,8 @@
 """Render a Slack app manifest for one librarian instance.
 
 Usage:
-    python -m instance.manifest instances/pirl.toml -o manifest.json
-    python -m instance.manifest instances/igi.toml -o manifests/igi.json
+    python -m instance.manifest instances/igi.toml -o manifest.json
+    python -m instance.manifest instances/pirl.toml -o manifests/pirl.json
 
 The instance file defaults to $DATA_LIBRARIAN_INSTANCE when no path is given.
 """

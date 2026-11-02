@@ -1,7 +1,7 @@
 """Per-instance configuration for data-librarian.
 
-The same code base backs several Slack apps (for example "PIRL Librarian" and
-"IGI Librarian"). Each app runs with its own TOML file, selected with the
+The same code base backs several Slack apps (for example "IGI Librarian" and
+"PIRL Librarian"). Each app runs with its own TOML file, selected with the
 ``DATA_LIBRARIAN_INSTANCE`` environment variable. See ``instances/`` for examples.
 """
 
@@ -30,10 +30,10 @@ _MAX_COMMAND_LENGTH = 32  # Slack's limit, including the leading slash.
 class InstanceConfig:
     """Settings that distinguish one librarian instance from another."""
 
-    name: str  # Slack app name, e.g. "PIRL Librarian"
-    label: str  # Short group name used in messages, e.g. "PIRL"
-    command_prefix: str  # e.g. "pirl" -> /pirl-status
-    id_prefix: str  # e.g. "pirl" -> pirl_<fields>, pirl_ref_<fields>
+    name: str  # Slack app name, e.g. "IGI Librarian"
+    label: str  # Short group name used in messages, e.g. "IGI"
+    command_prefix: str  # e.g. "igi" -> /igi-status
+    id_prefix: str  # e.g. "igi" -> igi_<fields>, igi_ref_<fields>
     description: str
     bot_display_name: str
     registry_dir: Path | None = None
@@ -134,7 +134,7 @@ def get_instance() -> InstanceConfig:
     path = os.environ.get(INSTANCE_ENV)
     if not path:
         raise RuntimeError(
-            f"{INSTANCE_ENV} is not set; point it at an instance file such as instances/pirl.toml"
+            f"{INSTANCE_ENV} is not set; point it at an instance file such as instances/igi.toml"
         )
     return _load_cached(path)
 

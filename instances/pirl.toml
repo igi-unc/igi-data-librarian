@@ -1,7 +1,7 @@
 # PIRL Librarian: data-librarian instance for the PIRL Slack app.
-# Select it with DATA_LIBRARIAN_INSTANCE=instances/pirl.toml (see .env.sample).
-# After changing names or commands, regenerate the Slack manifest:
-#   python -m instance.manifest instances/pirl.toml -o manifest.json
+# Select it with DATA_LIBRARIAN_INSTANCE=instances/pirl.toml.
+# Generate its Slack manifest with:
+#   python -m instance.manifest instances/pirl.toml -o manifests/pirl.json
 
 name = "PIRL Librarian"
 label = "PIRL"
