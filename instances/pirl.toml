@@ -1,0 +1,23 @@
+# PIRL Librarian: data-librarian instance for the PIRL Slack app.
+# Select it with DATA_LIBRARIAN_INSTANCE=instances/pirl.toml (see .env.sample).
+# After changing names or commands, regenerate the Slack manifest:
+#   python -m instance.manifest instances/pirl.toml -o manifest.json
+
+name = "PIRL Librarian"
+label = "PIRL"
+command_prefix = "pirl"        # /pirl-status, /pirl-sequencing-accession, /pirl-reference-accession, /pirl-help
+id_prefix = "pirl"             # dataset IDs pirl_<fields>; reference IDs pirl_ref_<fields>
+bot_display_name = "pirl-librarian"
+description = "Accession and monitor PIRL sequencing datasets and references"
+
+[registry]
+# Override at runtime with DATA_LIBRARIAN_REGISTRY_DIR.
+dir = "/datastore/nextgenout5/share/labs/Vincent_Lab/members/spvensko/projects/pirl_data_handler/test_registry"
+# Existing PIRL registry file names, kept so no data needs to be renamed.
+sequencing_tsv = "pirl_sequencing.tsv"
+references_tsv = "pirl_references.tsv"
+database = "pirl_registry.sqlite3"
+
+# Optional: override individual commands instead of using command_prefix.
+# [commands]
+# status = "/pirl-status"

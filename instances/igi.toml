@@ -1,0 +1,17 @@
+# IGI Librarian: data-librarian instance for the IGI Slack app.
+# Select it with DATA_LIBRARIAN_INSTANCE=instances/igi.toml.
+# Generate its Slack manifest with:
+#   python -m instance.manifest instances/igi.toml -o manifests/igi.json
+
+name = "IGI Librarian"
+label = "IGI"
+command_prefix = "igi"         # /igi-status, /igi-sequencing-accession, /igi-reference-accession, /igi-help
+id_prefix = "igi"
+bot_display_name = "igi-librarian"
+description = "Accession and monitor IGI sequencing datasets and references"
+
+[registry]
+# TODO: set the IGI registry directory before running this instance,
+# or provide DATA_LIBRARIAN_REGISTRY_DIR at runtime.
+# dir = "/path/to/igi/registry"
+# File names default to sequencing.tsv, references.tsv and registry.sqlite3.

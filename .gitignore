@@ -1,0 +1,79 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+
+# Python environments and generated files
+.venv/
+.venv.*/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+*.eggs/
+build/
+dist/
+
+# Test, lint, type-check, and coverage output
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.tox/
+.coverage
+coverage.xml
+cov_*/
+logs/
+
+# Slack CLI machine/workspace state
+.slack/apps.*.json
+.slack/cache/
+
+# Runtime registry and OAuth state
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Sequencing and analysis data must never enter the source repository
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.bam
+*.bai
+*.cram
+*.crai
+*.sam
+*.vcf
+*.vcf.gz
+*.bcf
+*.h5
+*.h5ad
+*.loom
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+*~
+tmp.txt
+
+# Local AI-tool configuration
+.claude/*.local.json

@@ -1,0 +1,85 @@
+{
+  "display_information": {
+    "name": "PIRL Librarian",
+    "description": "Accession and monitor PIRL sequencing datasets and references"
+  },
+  "features": {
+    "agent_view": {
+      "agent_description": "Monitor sequencing files, explain registry status, and prepare reviewed PIRL accessions.",
+      "suggested_prompts": [
+        {
+          "title": "Registry status",
+          "message": "What is the current PIRL registry status?"
+        },
+        {
+          "title": "New files",
+          "message": "Are there unregistered files?"
+        }
+      ]
+    },
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "bot_user": {
+      "display_name": "pirl-librarian",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/pirl-status",
+        "description": "Show new and missing PIRL files",
+        "should_escape": false
+      },
+      {
+        "command": "/pirl-sequencing-accession",
+        "description": "Review and accession sequencing files",
+        "should_escape": false
+      },
+      {
+        "command": "/pirl-reference-accession",
+        "description": "Review and accession reference files",
+        "should_escape": false
+      },
+      {
+        "command": "/pirl-help",
+        "description": "Show PIRL Librarian commands",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://ngrok-free.app/slack/oauth_redirect"
+    ],
+    "scopes": {
+      "bot": [
+        "app_mentions:read",
+        "chat:write",
+        "commands",
+        "im:history",
+        "reactions:write",
+        "assistant:write"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://ngrok-free.app/slack/events",
+      "bot_events": [
+        "app_home_opened",
+        "app_mention",
+        "message.im"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://ngrok-free.app/slack/events"
+    },
+    "is_mcp_enabled": false,
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}
