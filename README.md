@@ -1,15 +1,15 @@
 # data-librarian
 
 One code base for several Slack "librarian" apps that monitor and accession sequencing
-data, for example **IGI Librarian** (`/igi-status`, ...) and **PIRL Librarian**
+data, for example **IGI Data Librarian** (`/igi-status`, ...) and **PIRL Data Librarian**
 (`/pirl-status`, ...). Each Slack app is an *instance* with its own TOML file in `instances/`.
-The default instance for this repository is IGI Librarian (`instances/igi.toml`).
+The default instance for this repository is IGI Data Librarian (`instances/igi.toml`).
 
 ## Instances
 
 | Setting | Example (`instances/igi.toml`) | Effect |
 |---|---|---|
-| `name` | `IGI Librarian` | Slack app name, help/home headers, assistant name |
+| `name` | `IGI Data Librarian` | Slack app name, help/home headers, assistant name |
 | `label` | `IGI` | Short name in messages ("IGI registry status") |
 | `command_prefix` | `igi` | `/igi-status`, `/igi-sequencing-accession`, `/igi-reference-accession`, `/igi-help` |
 | `id_prefix` | `igi` | Dataset IDs `igi_<fields>`, reference IDs `igi_ref_<fields>` |

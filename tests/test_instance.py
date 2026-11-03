@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_pirl_example_instance_keeps_its_commands_and_files():
     pirl = load_instance(ROOT / "instances" / "pirl.toml")
-    assert pirl.name == "PIRL Librarian"
+    assert pirl.name == "PIRL Data Librarian"
     assert pirl.commands == {
         "status": "/pirl-status",
         "sequencing-accession": "/pirl-sequencing-accession",
@@ -30,7 +30,7 @@ def test_pirl_example_instance_keeps_its_commands_and_files():
 
 def test_igi_instance_uses_its_own_commands():
     igi = load_instance(ROOT / "instances" / "igi.toml")
-    assert igi.name == "IGI Librarian"
+    assert igi.name == "IGI Data Librarian"
     assert igi.commands == {
         "status": "/igi-status",
         "sequencing-accession": "/igi-sequencing-accession",
@@ -48,8 +48,8 @@ def test_committed_manifest_matches_default_igi_instance():
 
 
 def test_manifest_commands_follow_instance():
-    manifest = build_manifest(parse_instance({"name": "IGI Librarian", "command_prefix": "igi"}))
-    assert manifest["display_information"]["name"] == "IGI Librarian"
+    manifest = build_manifest(parse_instance({"name": "IGI Data Librarian", "command_prefix": "igi"}))
+    assert manifest["display_information"]["name"] == "IGI Data Librarian"
     assert [c["command"] for c in manifest["features"]["slash_commands"]] == [
         "/igi-status", "/igi-sequencing-accession", "/igi-reference-accession", "/igi-help",
     ]
@@ -57,13 +57,13 @@ def test_manifest_commands_follow_instance():
 
 def test_command_overrides_and_defaults():
     config = parse_instance({
-        "name": "IGI Librarian",
+        "name": "IGI Data Librarian",
         "command_prefix": "igi",
         "commands": {"status": "/igi-whatsnew"},
     })
     assert config.label == "IGI"
     assert config.id_prefix == "igi"
-    assert config.bot_display_name == "igi-librarian"
+    assert config.bot_display_name == "igi-data-librarian"
     assert config.command("status") == "/igi-whatsnew"
     assert config.command("help") == "/igi-help"
 

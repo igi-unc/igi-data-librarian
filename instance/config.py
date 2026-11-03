@@ -1,7 +1,7 @@
 """Per-instance configuration for data-librarian.
 
-The same code base backs several Slack apps (for example "IGI Librarian" and
-"PIRL Librarian"). Each app runs with its own TOML file, selected with the
+The same code base backs several Slack apps (for example "IGI Data Librarian" and
+"PIRL Data Librarian"). Each app runs with its own TOML file, selected with the
 ``DATA_LIBRARIAN_INSTANCE`` environment variable. See ``instances/`` for examples.
 """
 
@@ -30,7 +30,7 @@ _MAX_COMMAND_LENGTH = 32  # Slack's limit, including the leading slash.
 class InstanceConfig:
     """Settings that distinguish one librarian instance from another."""
 
-    name: str  # Slack app name, e.g. "IGI Librarian"
+    name: str  # Slack app name, e.g. "IGI Data Librarian"
     label: str  # Short group name used in messages, e.g. "IGI"
     command_prefix: str  # e.g. "igi" -> /igi-status
     id_prefix: str  # e.g. "igi" -> igi_<fields>, igi_ref_<fields>

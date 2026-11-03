@@ -1,6 +1,6 @@
 {
   "display_information": {
-    "name": "IGI Librarian",
+    "name": "IGI Data Librarian",
     "description": "Accession and monitor IGI sequencing datasets and references"
   },
   "features": {
@@ -23,7 +23,7 @@
       "messages_tab_read_only_enabled": false
     },
     "bot_user": {
-      "display_name": "igi-librarian",
+      "display_name": "igi-data-librarian",
       "always_online": true
     },
     "slash_commands": [
@@ -44,7 +44,7 @@
       },
       {
         "command": "/igi-help",
-        "description": "Show IGI Librarian commands",
+        "description": "Show IGI Data Librarian commands",
         "should_escape": false
       }
     ]

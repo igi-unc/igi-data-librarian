@@ -1,13 +1,13 @@
-# PIRL Librarian: data-librarian instance for the PIRL Slack app.
+# PIRL Data Librarian: data-librarian instance for the PIRL Slack app.
 # Select it with DATA_LIBRARIAN_INSTANCE=instances/pirl.toml.
 # Generate its Slack manifest with:
 #   python -m instance.manifest instances/pirl.toml -o manifests/pirl.json
 
-name = "PIRL Librarian"
+name = "PIRL Data Librarian"
 label = "PIRL"
 command_prefix = "pirl"        # /pirl-status, /pirl-sequencing-accession, /pirl-reference-accession, /pirl-help
 id_prefix = "pirl"             # dataset IDs pirl_<fields>; reference IDs pirl_ref_<fields>
-bot_display_name = "pirl-librarian"
+bot_display_name = "pirl-data-librarian"
 description = "Accession and monitor PIRL sequencing datasets and references"
 
 [registry]
