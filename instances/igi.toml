@@ -16,3 +16,10 @@ description = "Accession and monitor IGI sequencing datasets and references"
 # or provide DATA_LIBRARIAN_REGISTRY_DIR at runtime.
 # dir = "/path/to/igi/registry"
 # File names default to sequencing.tsv, references.tsv and registry.sqlite3.
+
+# Chat assistant for DMs and @mentions. It uses Claude only when ANTHROPIC_API_KEY is set
+# in .env; otherwise it replies with the list of slash commands. Defaults shown.
+# [assistant]
+# model = "claude-opus-5-5"
+# effort = "medium"     # low | medium | high | xhigh | max
+# fallbacks = true      # retry declined requests on Anthropic's recommended fallback model

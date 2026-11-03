@@ -25,6 +25,11 @@ _PREFIX_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _COMMAND_RE = re.compile(r"^/[a-z0-9][a-z0-9_-]*$")
 _MAX_COMMAND_LENGTH = 32  # Slack's limit, including the leading slash.
 
+# Chat assistant defaults (used only when an Anthropic credential is configured).
+DEFAULT_ASSISTANT_MODEL = "claude-opus-5-5"
+DEFAULT_ASSISTANT_EFFORT = "medium"
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
 
 @dataclass(frozen=True)
 class InstanceConfig:
@@ -41,6 +46,9 @@ class InstanceConfig:
     references_tsv: str = "references.tsv"
     database: str = "registry.sqlite3"
     command_overrides: tuple[tuple[str, str], ...] = ()
+    assistant_model: str = DEFAULT_ASSISTANT_MODEL
+    assistant_effort: str = DEFAULT_ASSISTANT_EFFORT
+    assistant_fallbacks: bool = True  # retry declined requests on Anthropic's recommended fallback model
     source_path: Path | None = None
 
     def command(self, key: str) -> str:
@@ -87,6 +95,15 @@ def parse_instance(data: dict, source_path: Path | None = None) -> InstanceConfi
     if unknown:
         raise ValueError(f"Unknown [commands] keys{where}: {sorted(unknown)}; expected {COMMANDS}")
 
+    assistant = data.get("assistant", {}) or {}
+    assistant_model = str(assistant.get("model") or DEFAULT_ASSISTANT_MODEL).strip()
+    assistant_effort = str(assistant.get("effort") or DEFAULT_ASSISTANT_EFFORT).strip()
+    if assistant_effort not in EFFORT_LEVELS:
+        raise ValueError(f"[assistant] effort must be one of {EFFORT_LEVELS}{where}; got {assistant_effort!r}")
+    assistant_fallbacks = assistant.get("fallbacks", True)
+    if not isinstance(assistant_fallbacks, bool):
+        raise ValueError(f"[assistant] fallbacks must be true or false{where}")
+
     config = InstanceConfig(
         name=name,
         label=label,
@@ -101,6 +118,9 @@ def parse_instance(data: dict, source_path: Path | None = None) -> InstanceConfi
         references_tsv=str(registry.get("references_tsv", "references.tsv")),
         database=str(registry.get("database", "registry.sqlite3")),
         command_overrides=tuple(sorted(overrides.items())),
+        assistant_model=assistant_model,
+        assistant_effort=assistant_effort,
+        assistant_fallbacks=assistant_fallbacks,
         source_path=source_path,
     )
 

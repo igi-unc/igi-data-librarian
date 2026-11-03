@@ -4,7 +4,8 @@ from logging import Logger
 from slack_bolt import BoltContext, Say, SayStream, SetStatus
 from slack_sdk import WebClient
 
-from agent import AgentDeps, run_agent
+from agent import AgentDeps, assistant_enabled, basic_reply_text, run_agent
+from instance import get_instance
 from thread_context import conversation_store
 from listeners.views.feedback_builder import build_feedback_blocks
 
@@ -35,6 +36,11 @@ def handle_app_mentioned(
             )
             return
 
+        # Without an Anthropic credential, answer with the fixed command list
+        if not assistant_enabled():
+            say(text=basic_reply_text(get_instance()), thread_ts=thread_ts)
+            return
+
         # Set assistant thread status with loading messages
         set_status(
             status="Thinking...",
@@ -50,12 +56,6 @@ def handle_app_mentioned(
         # Get conversation history
         history = conversation_store.get_history(channel_id, thread_ts)
 
-        # Build input for the agent
-        if history:
-            input_items = history + [{"role": "user", "content": cleaned_text}]
-        else:
-            input_items = cleaned_text
-
         # Run the agent
         deps = AgentDeps(
             client=client,
@@ -65,16 +65,17 @@ def handle_app_mentioned(
             message_ts=event["ts"],
             user_token=context.user_token,
         )
-        result = run_agent(input_items, deps)
+        reply = run_agent(history, cleaned_text, deps)
 
         # Stream response in thread with feedback buttons
         streamer = say_stream()
-        streamer.append(markdown_text=result.final_output)
+        streamer.append(markdown_text=reply.text)
         feedback_blocks = build_feedback_blocks()
         streamer.stop(blocks=feedback_blocks)
 
         # Store conversation history
-        conversation_store.set_history(channel_id, thread_ts, result.to_input_list())
+        if reply.messages is not None:
+            conversation_store.set_history(channel_id, thread_ts, reply.messages)
 
     except Exception as e:
         logger.exception(f"Failed to handle app mention: {e}")

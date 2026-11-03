@@ -34,6 +34,22 @@ python -m instance.manifest instances/pirl.toml -o manifests/pirl.json # another
 To run two instances from one checkout, give each its own secrets file and select it with
 `DATA_LIBRARIAN_ENV_FILE=.env.pirl python3 app.py`.
 
+
+## Chat assistant (Claude)
+
+Slash commands never use an AI model. DMs and @mentions are answered by a Claude-backed
+assistant **only when an Anthropic credential is configured**:
+
+- **Basic mode** (default, no key): the bot replies to chat with its list of slash commands.
+- **Claude mode**: set `ANTHROPIC_API_KEY` in the instance's `.env` (an organization API key
+  from the Claude Console) and restart the bot.
+
+Per-instance settings live in an optional `[assistant]` table in `instances/<name>.toml`:
+`model` (default `claude-opus-5-5`), `effort` (`low` ... `max`, default `medium`), and
+`fallbacks` (default `true`: a request declined by Claude's safety classifiers is retried
+server-side on Anthropic's recommended fallback model). Chat messages are sent to Anthropic
+only in Claude mode.
+
 ---
 
 # Starter Agent for Slack (Bolt for Python and OpenAI Agents SDK)
