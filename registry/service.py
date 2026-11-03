@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from instance import InstanceConfig, get_instance
+from instance import DEFAULT_ID_FIELDS, InstanceConfig, RaftConfig, get_instance
 
 
 HEADERS = [
@@ -20,8 +20,10 @@ HEADERS = [
     "perturbation", "bio_rep_id", "tech_rep_id", "lbg_path", "longleaf_path",
     "labarchives_path", "sample_type_origin", "sequencing_type",
     "sequencing_read_type", "sequencing_instrument", "capture_kit",
-    "library_primary_contact_person", "notes",
+    "library_primary_contact_person", "notes", "lims_number",
 ]
+# Earlier header (before lims_number); such files are upgraded in place on first use.
+LEGACY_HEADERS = HEADERS[:-1]
 
 REFERENCE_HEADERS = [
     "reference_id", "name", "reference_type", "species", "assembly",
@@ -63,10 +65,9 @@ WORKFLOW_DEFINITIONS = [
     },
 ]
 
-UUID_FIELDS = [
-    "source", "sample_id", "sample_type", "analyte", "platform", "library_type",
-    "species", "sequenced_year", "perturbation", "bio_rep_id", "tech_rep_id",
-]
+UUID_FIELDS = list(DEFAULT_ID_FIELDS)  # default; instances may override with [registry] id_fields
+
+WORKFLOW_STATUSES = {"requested", "preparing", "ready", "queued", "running", "completed", "failed", "cancelled"}
 
 CONTROLLED_VALUES = {
     "source": ["1015", "14169", "aml_0001", "balbc", "bbn963", "bl6", "t11", "tc-797", "u87", "u937-a2"],
@@ -115,9 +116,20 @@ class RegistryService:
         sequencing_tsv: str = "sequencing.tsv",
         references_tsv: str = "references.tsv",
         database: str = "registry.sqlite3",
+        id_fields: tuple[str, ...] | list[str] | None = None,
+        controlled_values: dict[str, list[str]] | None = None,
     ):
         self.root = root.resolve()
         self.id_prefix = id_prefix
+        self.id_fields = list(id_fields or UUID_FIELDS)
+        unknown = set(self.id_fields) - set(HEADERS)
+        if unknown:
+            raise ValueError(f"Unknown registry id_fields: {sorted(unknown)}")
+        self.controlled_values = {
+            field: list(values) for field, values in (controlled_values or CONTROLLED_VALUES).items()
+        }
+        self._overridden_fields: set[str] = set()
+        self._raft: RaftConfig | None = None
         self.sequencing_dir = self.root / "sequencing"
         self.references_dir = self.root / "references"
         self.tsv_path = self.root / sequencing_tsv
@@ -132,13 +144,26 @@ class RegistryService:
                 f"No registry directory configured for {config.name}: set [registry] dir{where} "
                 "or DATA_LIBRARIAN_REGISTRY_DIR"
             )
-        return cls(
+        controlled = {field: list(values) for field, values in CONTROLLED_VALUES.items()}
+        overrides = dict(config.vocabulary_overrides)
+        for field, values in overrides.items():
+            if field not in CONTROLLED_VALUES:
+                raise ValueError(
+                    f"[vocabulary] {field} is not a controlled field; expected one of {sorted(CONTROLLED_VALUES)}"
+                )
+            controlled[field] = list(values)
+        service = cls(
             config.registry_dir,
             id_prefix=config.id_prefix,
             sequencing_tsv=config.sequencing_tsv,
             references_tsv=config.references_tsv,
             database=config.database,
+            id_fields=config.id_fields,
+            controlled_values=controlled,
         )
+        service._overridden_fields = set(overrides)
+        service._raft = config.raft
+        return service
 
     @classmethod
     def from_environment(cls) -> "RegistryService":
@@ -154,7 +179,9 @@ class RegistryService:
         else:
             with self.tsv_path.open(newline="", encoding="utf-8") as handle:
                 header = next(csv.reader(handle, delimiter="\t"), None)
-            if header != HEADERS:
+            if header == LEGACY_HEADERS:
+                self._upgrade_tsv(self.tsv_path, HEADERS)
+            elif header != HEADERS:
                 raise RuntimeError(f"Unexpected TSV header in {self.tsv_path}")
         if not self.references_tsv_path.exists():
             with self.references_tsv_path.open("w", newline="", encoding="utf-8") as handle:
@@ -303,10 +330,21 @@ class RegistryService:
                 );
                 """
             )
-            for field, values in CONTROLLED_VALUES.items():
+            for field, values in self.controlled_values.items():
                 connection.executemany(
                     "INSERT OR IGNORE INTO vocabulary VALUES (?, ?, ?)",
                     [(field, value, _now()) for value in values],
+                )
+            for field in self._overridden_fields:
+                # Drop seeded defaults this instance replaced, keeping any value a dataset uses.
+                keep = set(self.controlled_values[field]) | {
+                    value for (value,) in connection.execute(
+                        "SELECT DISTINCT json_extract(row_json, ?) FROM datasets", (f"$.{field}",)
+                    ) if value
+                }
+                connection.executemany(
+                    "DELETE FROM vocabulary WHERE field_name = ? AND value = ?",
+                    [(field, value) for value in CONTROLLED_VALUES[field] if value not in keep],
                 )
             for field, values in REFERENCE_CONTROLLED_VALUES.items():
                 connection.executemany(
@@ -323,6 +361,25 @@ class RegistryService:
                      json.dumps(workflow["compatible_analytes"]), json.dumps(workflow["compatible_library_types"]),
                      workflow["description"], _now(), _now()),
                 )
+            if self._raft:
+                for raft_workflow in self._raft.workflows:
+                    connection.execute(
+                        """INSERT INTO workflow_definitions
+                           (workflow_id, name, version, analysis_type, compatible_analytes_json,
+                            compatible_library_types_json, description, entrypoint, active, created_at, updated_at)
+                           VALUES (?, ?, ?, 'raft', ?, ?, ?, 'raft', ?, ?, ?)
+                           ON CONFLICT(workflow_id) DO UPDATE SET
+                             name = excluded.name, version = excluded.version,
+                             compatible_analytes_json = excluded.compatible_analytes_json,
+                             compatible_library_types_json = excluded.compatible_library_types_json,
+                             description = excluded.description, active = excluded.active,
+                             updated_at = excluded.updated_at""",
+                        (raft_workflow.workflow_id, raft_workflow.name, raft_workflow.version or "unset",
+                         json.dumps(list(raft_workflow.compatible_analytes)),
+                         json.dumps(list(raft_workflow.compatible_library_types)),
+                         f"RAFT {raft_workflow.workflow} ({raft_workflow.input_data})",
+                         int(raft_workflow.enabled), _now(), _now()),
+                    )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
@@ -368,17 +425,20 @@ class RegistryService:
             reference_files=len(observed_references),
             unregistered_references=tuple(path for path in observed_references if str(path) not in known_references),
             missing_references=tuple(Path(path) for path in sorted(known_references) if not Path(path).exists()),
-            requested_workflows=workflow_counts.get("requested", 0) + workflow_counts.get("queued", 0),
+            requested_workflows=sum(
+                workflow_counts.get(key, 0) for key in ("requested", "preparing", "ready", "queued")
+            ),
             running_workflows=workflow_counts.get("running", 0),
             failed_workflows=workflow_counts.get("failed", 0),
         )
 
     def vocabularies(self) -> dict[str, list[str]]:
         self.initialize()
-        result = {field: [] for field in CONTROLLED_VALUES}
+        result = {field: [] for field in self.controlled_values}
         with self._connect() as connection:
             for row in connection.execute(
-                "SELECT field_name, value FROM vocabulary ORDER BY field_name, value"
+                "SELECT field_name, value FROM vocabulary WHERE field_name NOT LIKE 'reference.%' "
+                "ORDER BY field_name, value"
             ):
                 result.setdefault(row["field_name"], []).append(row["value"])
         return result
@@ -398,7 +458,8 @@ class RegistryService:
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT * FROM workflow_definitions
-                   WHERE active = 1 AND analysis_type != 'provided_hla' ORDER BY name"""
+                   WHERE active = 1 AND analysis_type != 'provided_hla'
+                     AND COALESCE(entrypoint, '') != 'raft' ORDER BY name"""
             ).fetchall()
         return [
             {
@@ -517,7 +578,7 @@ class RegistryService:
             else os.path.commonpath(files)
         )
         row["uuid"] = "_".join(
-            [self.id_prefix] + [_slug(row[field]) for field in UUID_FIELDS if row[field]]
+            [self.id_prefix] + [_slug(row[field]) for field in self.id_fields if row[field]]
         )
         warnings: list[str] = []
         if row["sequencing_read_type"] == "paired-end":
@@ -552,7 +613,7 @@ class RegistryService:
                     "INSERT INTO files VALUES (?, ?, ?, ?, ?, ?)",
                     (str(path), internal_id, stat.st_size, stat.st_mtime_ns, None, created_at),
                 )
-            for field in CONTROLLED_VALUES:
+            for field in self.controlled_values:
                 if row.get(field):
                     connection.execute(
                         "INSERT OR IGNORE INTO vocabulary VALUES (?, ?, ?)",
@@ -618,8 +679,67 @@ class RegistryService:
         with self._connect() as connection:
             return [dict(row) for row in connection.execute(query, parameters)]
 
+    def datasets(self) -> list[dict]:
+        """Registered datasets, newest first, each with its row and file paths."""
+        self.initialize()
+        with self._connect() as connection:
+            rows = connection.execute("SELECT * FROM datasets ORDER BY created_at DESC, internal_id").fetchall()
+            files = connection.execute("SELECT path, dataset_internal_id FROM files ORDER BY path").fetchall()
+        by_dataset: dict[str, list[str]] = {}
+        for item in files:
+            by_dataset.setdefault(item["dataset_internal_id"], []).append(item["path"])
+        return [
+            {"internal_id": row["internal_id"], "dataset_id": row["spreadsheet_uuid"],
+             "row": json.loads(row["row_json"]), "files": by_dataset.get(row["internal_id"], []),
+             "created_at": row["created_at"]}
+            for row in rows
+        ]
+
+    def dataset(self, internal_id: str) -> dict:
+        for item in self.datasets():
+            if item["internal_id"] == internal_id:
+                return item
+        raise ValueError(f"Unknown dataset: {internal_id}")
+
+    def create_workflow_run(
+        self, workflow_id: str, dataset_internal_id: str, requested_by: str, parameters: dict
+    ) -> str:
+        self.initialize()
+        run_id, created_at = str(uuid.uuid4()), _now()
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO workflow_runs
+                   (run_id, workflow_id, dataset_internal_id, status, requested_by,
+                    scheduler_job_id, parameters_json, software_versions_json,
+                    reference_ids_json, requested_at, started_at, completed_at, error_message)
+                   VALUES (?, ?, ?, 'requested', ?, NULL, ?, '{}', '[]', ?, NULL, NULL, NULL)""",
+                (run_id, workflow_id, dataset_internal_id, requested_by,
+                 json.dumps(parameters, sort_keys=True), created_at),
+            )
+            connection.execute(
+                "INSERT INTO events(event_type, dataset_internal_id, details_json, created_at) VALUES (?, ?, ?, ?)",
+                ("workflow_requested", dataset_internal_id,
+                 json.dumps({"run_id": run_id, "workflow_id": workflow_id, "requested_by": requested_by}),
+                 created_at),
+            )
+        return run_id
+
+    def workflow_run(self, run_id: str) -> dict:
+        for run in self.workflow_runs():
+            if run["run_id"] == run_id:
+                return {**run, "parameters": json.loads(run["parameters_json"] or "{}")}
+        raise ValueError(f"Unknown workflow run: {run_id}")
+
+    def record_event(self, event_type: str, dataset_internal_id: str | None, details: dict) -> None:
+        self.initialize()
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO events(event_type, dataset_internal_id, details_json, created_at) VALUES (?, ?, ?, ?)",
+                (event_type, dataset_internal_id, json.dumps(details, sort_keys=True), _now()),
+            )
+
     def update_workflow_run(self, run_id: str, status: str, **details) -> None:
-        allowed = {"requested", "queued", "running", "completed", "failed", "cancelled"}
+        allowed = WORKFLOW_STATUSES
         if status not in allowed:
             raise ValueError(f"Invalid workflow status: {status}")
         self.initialize()
@@ -689,6 +809,12 @@ class RegistryService:
                 prepared,
             )
 
+    def _upgrade_tsv(self, tsv_path: Path, headers: list[str]) -> None:
+        """Rewrite a TSV with the current headers (new columns left empty)."""
+        with tsv_path.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        self._write_rows(tsv_path, headers, rows)
+
     def _append_tsv(self, row: dict[str, str]) -> None:
         self._append_rows(self.tsv_path, HEADERS, row)
 
@@ -696,10 +822,15 @@ class RegistryService:
         with tsv_path.open(newline="", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle, delimiter="\t"))
         rows.append(row)
+        self._write_rows(tsv_path, headers, rows)
+
+    def _write_rows(self, tsv_path: Path, headers: list[str], rows: list[dict]) -> None:
         fd, temporary = tempfile.mkstemp(prefix=f".{tsv_path.name}.", dir=self.root)
         try:
             with os.fdopen(fd, "w", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=headers, delimiter="\t", lineterminator="\n")
+                writer = csv.DictWriter(
+                    handle, fieldnames=headers, delimiter="\t", lineterminator="\n", restval=""
+                )
                 writer.writeheader()
                 writer.writerows(rows)
                 handle.flush()

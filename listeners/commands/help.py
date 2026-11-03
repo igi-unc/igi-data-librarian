@@ -10,8 +10,12 @@ def build_help_text() -> str:
         f"• `{instance.command('status')}` — show new and missing files\n"
         f"• `{instance.command('sequencing-accession')}` — review and register sequencing files\n"
         f"• `{instance.command('reference-accession')}` — review and register files in the reference inbox\n"
-        f"• `{instance.command('help')}` — show this help\n\n"
-        "No sequencing or reference files are moved, renamed, modified, or deleted."
+        f"• `{instance.command('help')}` — show this help\n"
+        + (f"• `{instance.command('run')}` — set up and launch a RAFT workflow on a registered dataset (approvers)\n"
+           if instance.command_enabled("run") else "")
+        + "\nNo sequencing or reference files are moved, renamed, modified, or deleted."
+        + ("\nFile names and sample IDs are shown only to you (in forms or direct messages), never in channels."
+           if instance.protect_phi else "")
     )
 
 

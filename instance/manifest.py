@@ -21,6 +21,7 @@ COMMAND_DESCRIPTIONS = {
     "sequencing-accession": "Review and accession sequencing files",
     "reference-accession": "Review and accession reference files",
     "help": "Show {name} commands",
+    "run": "Set up and launch a RAFT workflow",
 }
 
 

@@ -23,6 +23,16 @@ TEXT_FIELDS = [
 ]
 
 REQUIRED_SELECTS = {"source", "sample_type", "analyte", "platform", "library_type", "species"}
+# Registry fields the LIMS can fill in (participant_id from the LIMS becomes "source").
+LIMS_FILLABLE = {"source", "sample_type", "analyte", "platform", "library_type", "species"}
+LIMS_FIELD_MAP = {"participant_id": "source", "sample_type": "sample_type", "analyte": "analyte",
+                  "platform": "platform", "library_type": "library_type", "species": "species"}
+
+
+_LIMS_WRITE_OPTION = {
+    "text": {"type": "plain_text", "text": "Record this dataset on the tube in the LIMS"},
+    "value": "write_back",
+}
 
 
 def _label(field: str) -> str:
@@ -48,6 +58,8 @@ def build_accession_modal(
 ) -> dict:
     vocabularies = vocabularies or CONTROLLED_VALUES
     inferred = _inferred(files)
+    instance = get_instance()
+    lims = instance.lims
     blocks = [
         {"type": "section", "text": {"type": "mrkdwn", "text": f"Select the files belonging to one logical dataset from these *{len(files)} unregistered files*."}},
         {"type": "divider"},
@@ -78,17 +90,35 @@ def build_accession_modal(
         }
         if inferred.get(field) in values:
             element["initial_option"] = _option(inferred[field])
-        blocks.append({
-            "type": "input", "block_id": field, "optional": field not in REQUIRED_SELECTS,
+        fillable = bool(lims) and field in LIMS_FILLABLE
+        block = {
+            "type": "input", "block_id": field, "optional": field not in REQUIRED_SELECTS or fillable,
             "dispatch_action": True,
             "label": {"type": "plain_text", "text": _label(field)}, "element": element,
-        })
+        }
+        if fillable:
+            block["hint"] = {"type": "plain_text", "text": "Leave blank to fill this in from the LIMS."}
+        blocks.append(block)
     for field, label, required, placeholder in TEXT_FIELDS:
         element = {"type": "plain_text_input", "action_id": "value", "placeholder": {"type": "plain_text", "text": placeholder}}
         if field == "sequenced_year":
             element["initial_value"] = str(datetime.now().year)
-        blocks.append({"type": "input", "block_id": field, "optional": not required,
-                       "label": {"type": "plain_text", "text": label}, "element": element})
+        block = {"type": "input", "block_id": field, "optional": not required,
+                 "label": {"type": "plain_text", "text": label}, "element": element}
+        if field == "sample_id" and lims:
+            block["label"] = {"type": "plain_text", "text": lims.sample_label[:48]}
+            block["hint"] = {"type": "plain_text", "text": (
+                "Checked against the LIMS for this one tube. Shown only to you; never posted in channels."
+            )}
+            element["placeholder"] = {"type": "plain_text", "text": "sample ID or 9-digit LIMS number"}
+        blocks.append(block)
+        if field == "sample_id" and lims and instance.is_approver(user_id):
+            blocks.append({
+                "type": "input", "block_id": "lims_write_back", "optional": True,
+                "label": {"type": "plain_text", "text": "LIMS"},
+                "element": {"type": "checkboxes", "action_id": "selection",
+                            "initial_options": [_LIMS_WRITE_OPTION], "options": [_LIMS_WRITE_OPTION]},
+            })
     blocks.extend([
         {"type": "divider"},
         {"type": "input", "block_id": "known_hla_alleles", "optional": True,
@@ -125,7 +155,7 @@ def build_accession_modal(
 
 def build_review_view(
     proposal_id: str, row: dict, files: list[str], warnings: list[str], workflows: list[dict] | None = None,
-    provided_hla_calls: list[dict] | None = None,
+    provided_hla_calls: list[dict] | None = None, lims_summary: str | None = None,
 ) -> dict:
     metadata = "\n".join(f"*{key}:* `{value}`" for key, value in row.items() if value and key != "notes")
     warning_text = "\n".join(f"• :warning: {item}" for item in warnings)
@@ -133,6 +163,8 @@ def build_review_view(
         {"type": "section", "text": {"type": "mrkdwn", "text": f"*Proposed accession*\n{metadata}"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": f"*Files:* {len(files)}\n*Notes:* {row['notes'] or 'None'}"}},
     ]
+    if lims_summary:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*LIMS:* {lims_summary}"}})
     if workflows:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": (
             "*Requested analyses:*\n" + "\n".join(f"• {workflow['name']}" for workflow in workflows)
@@ -149,3 +181,12 @@ def build_review_view(
         {"type": "button", "action_id": "accession_reject", "value": proposal_id, "style": "danger", "text": {"type": "plain_text", "text": "Reject"}},
     ]})
     return {"type": "modal", "callback_id": "accession_review", "title": {"type": "plain_text", "text": "Review accession"}, "close": {"type": "plain_text", "text": "Close"}, "blocks": blocks}
+
+
+def build_message_view(title: str, message: str) -> dict:
+    return {
+        "type": "modal",
+        "title": {"type": "plain_text", "text": title[:24]},
+        "close": {"type": "plain_text", "text": "Done"},
+        "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": message}}],
+    }

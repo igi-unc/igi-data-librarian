@@ -50,6 +50,29 @@ Per-instance settings live in an optional `[assistant]` table in `instances/<nam
 server-side on Anthropic's recommended fallback model). Chat messages are sent to Anthropic
 only in Claude mode.
 
+## Privacy, LIMS and RAFT (optional per instance)
+
+These features are off unless the instance file turns them on; `instances/igi.toml` uses all three.
+
+- **`[privacy] protect_phi = true`**: file names, paths, sample IDs and dataset IDs are shown
+  only to the user who asked (in forms or a direct message from the bot). Channels get counts
+  and channel-safe labels: LIMS number, participant ID, RAFT project ID. `/igi-status` posts
+  counts in the channel and DMs the file names to the requester.
+- **`[permissions] approvers`**: Slack user IDs allowed to write to the LIMS and launch RAFT runs.
+- **`[lims]`**: catalog accessioned data into a LIMS. There is **no LIMS search from Slack**.
+  When a user enters a sample ID or LIMS number in the accession form, the bot checks that one
+  tube, fills blank fields from the LIMS's non-PHI fields, and stores the LIMS number. On
+  approval, an approver can record the dataset on the tube. Tokens come from `.env`
+  (`IGI_LIMS_READ_TOKEN`, `IGI_LIMS_WRITE_TOKEN` for IGI). Only an allowlist of non-PHI fields
+  is kept from LIMS responses (`lims/client.py`).
+- **`[raft]`**: `/igi-run` (approvers only) sets up a RAFT workflow on a registered dataset.
+  The bot uses its own RAFT workspace (`raft setup -d` run once in that directory), symlinks
+  the dataset's FASTQs/BAMs into `inputs/<fastqs|bams>/<project>/` (nothing is copied or
+  moved), writes a manifest, runs `raft check-manifest` and `raft run --setup-only`, then DMs
+  you a **Launch** button. Launch submits `raft run` with `sbatch`; the bot checks the job every
+  `poll_seconds` and reports when it finishes. Workflows are listed as `[[raft.workflows]]`;
+  each needs a RAFT `version` and `enabled = true`. Logs: `<workspace>/bot-logs/`.
+
 ---
 
 # Starter Agent for Slack (Bolt for Python and OpenAI Agents SDK)

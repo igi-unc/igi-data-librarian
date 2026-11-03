@@ -46,6 +46,11 @@
         "command": "/igi-help",
         "description": "Show IGI Data Librarian commands",
         "should_escape": false
+      },
+      {
+        "command": "/igi-run",
+        "description": "Set up and launch a RAFT workflow",
+        "should_escape": false
       }
     ]
   },

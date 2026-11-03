@@ -20,7 +20,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["agent*", "instance*", "listeners*", "registry*", "thread_context*"]
+include = ["agent*", "instance*", "lims*", "listeners*", "pipelines*", "registry*", "thread_context*"]
 
 [tool.ruff]
 [tool.ruff.lint]

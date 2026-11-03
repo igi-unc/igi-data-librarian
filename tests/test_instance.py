@@ -36,10 +36,20 @@ def test_igi_instance_uses_its_own_commands():
         "sequencing-accession": "/igi-sequencing-accession",
         "reference-accession": "/igi-reference-accession",
         "help": "/igi-help",
+        "run": "/igi-run",
     }
     assert igi.id_prefix == "igi"
+    assert igi.protect_phi is True
+    assert "sample_id" not in igi.id_fields and "lims_number" in igi.id_fields
+    assert igi.lims.url == "https://igi-lims.vercel.app"
+    assert igi.raft.workspace.name == "raft"
+    assert not igi.raft.enabled_workflows  # qc is configured but off until RAFT releases it
+
+
+def test_instance_without_registry_dir_is_rejected():
+    bare = parse_instance({"name": "X", "command_prefix": "x"})
     with pytest.raises(RuntimeError, match="No registry directory"):
-        RegistryService.from_instance(igi)
+        RegistryService.from_instance(bare)
 
 
 def test_committed_manifest_matches_default_igi_instance():

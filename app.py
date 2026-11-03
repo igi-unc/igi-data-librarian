@@ -7,6 +7,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_sdk import WebClient
 
 from listeners import register_listeners
+from pipelines.jobs import start_monitor
 
 # DATA_LIBRARIAN_ENV_FILE lets several instances share one checkout, each with its own secrets file.
 load_dotenv(dotenv_path=os.environ.get("DATA_LIBRARIAN_ENV_FILE", ".env"), override=False)
@@ -24,4 +25,5 @@ app = App(
 register_listeners(app)
 
 if __name__ == "__main__":
+    start_monitor(app.client)  # no-op unless the instance has a [raft] section
     SocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN")).start()

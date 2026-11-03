@@ -6,19 +6,69 @@
 
 name = "IGI Data Librarian"
 label = "IGI"
-command_prefix = "igi"         # /igi-status, /igi-sequencing-accession, /igi-reference-accession, /igi-help
+command_prefix = "igi"         # /igi-status, /igi-sequencing-accession, /igi-reference-accession, /igi-help, /igi-run
 id_prefix = "igi"
 bot_display_name = "igi-data-librarian"
 description = "Accession and monitor IGI sequencing datasets and references"
 
 [registry]
-# TODO: set the IGI registry directory before running this instance,
-# or provide DATA_LIBRARIAN_REGISTRY_DIR at runtime.
-# dir = "/path/to/igi/registry"
+dir = "/datastore/nextgenout5/share/labs/Vincent_Lab/datasets/IGI"
 # File names default to sequencing.tsv, references.tsv and registry.sqlite3.
+# Dataset IDs are built from these fields. IGI sample IDs contain PHI, so they are left out;
+# the LIMS number identifies the tube instead.
+id_fields = [
+    "source", "lims_number", "sample_type", "analyte", "platform", "library_type",
+    "species", "sequenced_year", "perturbation", "bio_rep_id", "tech_rep_id",
+]
+
+[vocabulary]
+# "source" is the IGI participant ID (e.g. P101), filled in from the LIMS.
+# The PIRL cell lines and strains do not apply here.
+source = []
+
+[privacy]
+# File names, paths, sample IDs and dataset IDs are shown only to the requesting user
+# (forms and direct messages). Channels get counts, LIMS numbers, participant IDs and RAFT project IDs.
+protect_phi = true
+
+[permissions]
+# Slack user IDs allowed to write to the LIMS and to launch RAFT runs.
+approvers = ["UQFSZSKQQ"]  # Steven Vensko
+
+[lims]
+# Used only to catalog accessioned data: check the one tube being accessioned and record
+# the dataset on it. There is no LIMS search from Slack.
+# Fictional-data demo until real data is approved for Slack and the bot.
+url = "https://igi-lims.vercel.app"
+read_token_env = "IGI_LIMS_READ_TOKEN"     # set in .env, never here
+write_token_env = "IGI_LIMS_WRITE_TOKEN"   # set in .env, never here
+timeout_seconds = 10
+sample_label = "IGI sample ID or LIMS number"
+
+[raft]
+# The bot's own RAFT workspace (created with `raft setup -d` in this directory).
+# Registered FASTQs/BAMs are symlinked into its inputs/ directory; nothing is copied or moved.
+workspace = "/datastore/nextgenout5/share/labs/Vincent_Lab/members/spvensko/igi/raft"
+executable = "/home/spvensko/.local/bin/raft"
+launcher = "sbatch"            # sbatch: the RAFT/Nextflow head job runs under Slurm; local: detached process
+nextflow_profile = ""          # raft run --profile at launch; empty uses the Nextflow default profile
+sbatch_args = ["--time=2-00:00:00", "--mem=8G", "--cpus-per-task=2"]
+setup_timeout_seconds = 1800
+poll_seconds = 300
+
+[[raft.workflows]]
+id = "qc"
+name = "Sequencing QC"
+workflow = "qc"
+version = ""                   # set when the RAFT qc workflow is released
+species = "human"
+input_data = "fastqs"
+enabled = false                # turn on once RAFT qc is finished (needs a version)
 
 # Chat assistant for DMs and @mentions. It uses Claude only when ANTHROPIC_API_KEY is set
 # in .env; otherwise it replies with the list of slash commands. Defaults shown.
+# Note: whatever users type to the assistant is sent to Anthropic. Keep it off for IGI
+# until real data is approved for that.
 # [assistant]
 # model = "claude-opus-5-5"
 # effort = "medium"     # low | medium | high | xhigh | max

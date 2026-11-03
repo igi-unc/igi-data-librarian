@@ -14,6 +14,8 @@ def build_app_home_view(install_url: str | None = None, is_connected: bool = Fal
                 f"• `{instance.command('sequencing-accession')}` — prepare a reviewed sequencing accession\n"
                 f"• `{instance.command('reference-accession')}` — prepare a reviewed reference accession\n"
                 f"• `{instance.command('help')}` — show command help"
+                + (f"\n• `{instance.command('run')}` — set up and launch a RAFT workflow (approvers)"
+                   if instance.command_enabled("run") else "")
             )}},
             {"type": "divider"},
             {"type": "context", "elements": [{"type": "mrkdwn", "text": (

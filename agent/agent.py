@@ -89,6 +89,8 @@ def basic_reply_text(instance: InstanceConfig) -> str:
         f"• `{instance.command('sequencing-accession')}` — review and register sequencing files\n"
         f"• `{instance.command('reference-accession')}` — review and register reference files\n"
         f"• `{instance.command('help')}` — show command help"
+        + (f"\n• `{instance.command('run')}` — set up and launch a RAFT workflow (approvers)"
+           if instance.command_enabled("run") else "")
     )
 
 
