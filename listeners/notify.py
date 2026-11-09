@@ -1,8 +1,8 @@
 """Where messages go.
 
 With ``[privacy] protect_phi = true`` the bot follows one rule: details that may contain
-PHI (file names, paths, sample IDs, dataset IDs) go only to the user who asked, in a
-modal or a direct message. Channels get counts and channel-safe labels (LIMS number,
+PHI (sample IDs, dataset IDs, LIMS details) go only to the user who asked, in a modal or a
+direct message. Channels get file names, counts and channel-safe labels (LIMS number,
 participant ID, RAFT project ID).
 """
 

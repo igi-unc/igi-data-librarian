@@ -94,10 +94,11 @@ def test_raft_config_parsing():
 def test_manifest_row_maps_registry_fields():
     dataset = {"internal_id": "abcd-1234", "row": {
         "source": "P101", "sample_type": "normal-blood", "analyte": "rna", "library_type": "poly-a",
-        "lims_number": "000000042"}}
+        "platform": "ont", "lims_number": "000000042"}}
     row = manifest_row(dataset, "igi-qc-1234abcd")
     assert row == {"Patient_Name": "P101", "Run_Name": "nr-000000042", "Dataset": "igi-qc-1234abcd",
-                   "File_Prefix": "nr-000000042", "Sequencing_Method": "RNA-Seq", "Normal": "TRUE"}
+                   "File_Prefix": "nr-000000042", "Sequencing_Method": "RNA-Seq", "Normal": "TRUE",
+                   "Group": "", "Platform": "ONT", "Read_Type": "long-read", "Sample_Type": "blood-normal"}
 
 
 def test_prepare_symlinks_inputs_and_runs_setup_only(raft_env):

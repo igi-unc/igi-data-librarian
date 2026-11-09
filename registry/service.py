@@ -68,6 +68,7 @@ WORKFLOW_DEFINITIONS = [
 UUID_FIELDS = list(DEFAULT_ID_FIELDS)  # default; instances may override with [registry] id_fields
 
 WORKFLOW_STATUSES = {"requested", "preparing", "ready", "queued", "running", "completed", "failed", "cancelled"}
+RAFT_PROJECT_STATUSES = {"idle", "running"}
 
 CONTROLLED_VALUES = {
     "source": ["1015", "14169", "aml_0001", "balbc", "bbn963", "bl6", "t11", "tc-797", "u87", "u937-a2"],
@@ -327,6 +328,17 @@ class RegistryService:
                     caller TEXT,
                     annotations_json TEXT NOT NULL,
                     FOREIGN KEY(run_id) REFERENCES workflow_runs(run_id)
+                );
+                CREATE TABLE IF NOT EXISTS raft_projects (
+                    project_id TEXT PRIMARY KEY,
+                    workflow_id TEXT NOT NULL,
+                    patient TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    due_at TEXT,
+                    scheduler_job_id TEXT,
+                    channel_id TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 );
                 """
             )
@@ -808,6 +820,58 @@ class RegistryService:
                 f"INSERT INTO {table} (run_id, {', '.join(columns)}) VALUES ({placeholders})",
                 prepared,
             )
+
+    # -- per-patient RAFT projects (automatic runs) ----------------------------------------
+    def raft_project(self, project_id: str) -> dict | None:
+        self.initialize()
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM raft_projects WHERE project_id = ?", (project_id,)).fetchone()
+        return dict(row) if row else None
+
+    def raft_projects(self, status: str | None = None) -> list[dict]:
+        self.initialize()
+        query, parameters = "SELECT * FROM raft_projects", ()
+        if status:
+            query, parameters = query + " WHERE status = ?", (status,)
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query + " ORDER BY project_id", parameters)]
+
+    def save_raft_project(self, project_id: str, **fields) -> dict:
+        """Create or update a per-patient RAFT project row; returns the stored row."""
+        allowed = {"workflow_id", "patient", "status", "due_at", "scheduler_job_id", "channel_id"}
+        unknown = set(fields) - allowed
+        if unknown:
+            raise ValueError(f"Unknown raft_projects field(s): {sorted(unknown)}")
+        if "status" in fields and fields["status"] not in RAFT_PROJECT_STATUSES:
+            raise ValueError(f"Invalid RAFT project status: {fields['status']}")
+        self.initialize()
+        now = _now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            exists = connection.execute("SELECT 1 FROM raft_projects WHERE project_id = ?", (project_id,)).fetchone()
+            if exists:
+                if fields:
+                    assignments = ", ".join(f"{name} = ?" for name in fields)
+                    connection.execute(f"UPDATE raft_projects SET {assignments}, updated_at = ? WHERE project_id = ?",
+                                       [*fields.values(), now, project_id])
+            else:
+                row = {"workflow_id": "", "patient": "", "status": "idle", "due_at": None,
+                       "scheduler_job_id": None, "channel_id": "", **fields}
+                connection.execute(
+                    """INSERT INTO raft_projects (project_id, workflow_id, patient, status, due_at,
+                       scheduler_job_id, channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (project_id, row["workflow_id"], row["patient"], row["status"], row["due_at"],
+                     row["scheduler_job_id"], row["channel_id"] or "", now, now),
+                )
+        return self.raft_project(project_id)
+
+    def project_runs(self, project_id: str) -> list[dict]:
+        """Workflow runs that belong to one per-patient RAFT project, oldest first."""
+        return [
+            {**run, "parameters": json.loads(run["parameters_json"] or "{}")}
+            for run in self.workflow_runs()
+            if json.loads(run["parameters_json"] or "{}").get("project_id") == project_id
+        ]
 
     def _upgrade_tsv(self, tsv_path: Path, headers: list[str]) -> None:
         """Rewrite a TSV with the current headers (new columns left empty)."""

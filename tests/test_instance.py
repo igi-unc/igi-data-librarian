@@ -43,7 +43,9 @@ def test_igi_instance_uses_its_own_commands():
     assert "sample_id" not in igi.id_fields and "lims_number" in igi.id_fields
     assert igi.lims.url == "https://igi-lims.vercel.app"
     assert igi.raft.workspace.name == "raft"
-    assert not igi.raft.enabled_workflows  # qc is configured but off until RAFT releases it
+    [qc] = igi.raft.auto_workflows
+    assert (qc.workflow, qc.version, qc.input_data, qc.workflow_profile) == ("qc", "1.0.0-dev", "multi", "standard")
+    assert qc.auto_delay_minutes == 15
 
 
 def test_instance_without_registry_dir_is_rejected():

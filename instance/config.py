@@ -28,7 +28,7 @@ DEFAULT_ID_FIELDS = (
     "source", "sample_id", "sample_type", "analyte", "platform", "library_type",
     "species", "sequenced_year", "perturbation", "bio_rep_id", "tech_rep_id",
 )
-RAFT_INPUT_TYPES = ("fastqs", "bams")
+RAFT_INPUT_TYPES = ("fastqs", "bams", "multi")  # multi: FASTQs and BAMs (e.g. RAFT qc)
 RAFT_LAUNCHERS = ("sbatch", "local")
 
 _PREFIX_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -69,11 +69,16 @@ class RaftWorkflow:
     workflow: str  # RAFT workflow name (raft run --workflow)
     version: str  # RAFT workflow version (raft run --version)
     species: str = "human"
-    input_data: str = "fastqs"  # fastqs | bams
+    input_data: str = "fastqs"  # fastqs | bams | multi
     workflow_profile: str = ""  # optional raft run --workflow-profile
     enabled: bool = True
     compatible_analytes: tuple[str, ...] = ()
     compatible_library_types: tuple[str, ...] = ()
+    # Automatic runs: every newly accessioned, compatible dataset joins one RAFT project per
+    # patient. The first new sample starts a timer; when it ends the project is (re-)run and
+    # Nextflow's resume skips samples that already finished.
+    auto_run: bool = False
+    auto_delay_minutes: int = 15
 
     @property
     def workflow_id(self) -> str:
@@ -95,6 +100,10 @@ class RaftConfig:
     @property
     def enabled_workflows(self) -> tuple[RaftWorkflow, ...]:
         return tuple(w for w in self.workflows if w.enabled)
+
+    @property
+    def auto_workflows(self) -> tuple[RaftWorkflow, ...]:
+        return tuple(w for w in self.workflows if w.enabled and w.auto_run)
 
     def workflow(self, workflow_id: str) -> RaftWorkflow:
         for workflow in self.workflows:
@@ -177,6 +186,16 @@ def _parse_lims(lims: dict, where: str) -> LimsConfig | None:
     )
 
 
+def _minutes(value, workflow_key: str, where: str) -> int:
+    try:
+        minutes = int(value)
+    except (TypeError, ValueError):
+        minutes = -1
+    if minutes < 0:
+        raise ValueError(f"RAFT workflow {workflow_key!r} auto_delay_minutes must be a whole number >= 0{where}")
+    return minutes
+
+
 def _parse_raft(raft: dict, base: Path, where: str) -> RaftConfig | None:
     if not raft:
         return None
@@ -209,6 +228,8 @@ def _parse_raft(raft: dict, base: Path, where: str) -> RaftConfig | None:
             enabled=bool(enabled),
             compatible_analytes=_str_tuple(item.get("compatible_analytes"), "compatible_analytes", where),
             compatible_library_types=_str_tuple(item.get("compatible_library_types"), "compatible_library_types", where),
+            auto_run=bool(item.get("auto_run", False)),
+            auto_delay_minutes=_minutes(item.get("auto_delay_minutes", 15), workflow_key, where),
         ))
     if len({w.id for w in workflows}) != len(workflows):
         raise ValueError(f"[[raft.workflows]] ids must be distinct{where}")

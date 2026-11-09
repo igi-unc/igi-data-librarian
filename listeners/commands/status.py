@@ -4,7 +4,6 @@ from slack_bolt import Ack, Respond
 from slack_sdk import WebClient
 
 from instance import get_instance
-from listeners.notify import dm, is_direct_message
 from registry import RegistryService
 
 
@@ -48,21 +47,9 @@ def handle_status_command(ack: Ack, respond: Respond, body: dict, client: WebCli
         instance = get_instance()
         status = RegistryService.from_environment().status()
         title = f"{instance.label} registry status"
-        private = is_direct_message(body.get("channel_id"))
-        if not instance.protect_phi or private:
-            respond(response_type="in_channel", text=title,
-                    blocks=build_status_blocks(status, title, include_files=True))
-            return
-        # File names can carry sample IDs: counts in the channel, names only to the requester.
-        blocks = build_status_blocks(status, title, include_files=False)
-        has_files = status.unregistered or status.unregistered_references
-        if has_files:
-            blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": (
-                f"File names were sent to <@{body['user_id']}> in a direct message."
-            )}]})
-        respond(response_type="in_channel", text=title, blocks=blocks)
-        if has_files:
-            dm(client, body["user_id"], f"{title}: new file names", _file_sections(status))
+        # File names carry no PHI, so they are listed in channels too.
+        respond(response_type="in_channel", text=title,
+                blocks=build_status_blocks(status, title, include_files=True))
     except Exception as exc:
         logger.exception("Registry status failed")
         respond(response_type="ephemeral", text=f":warning: Status failed: {exc}")

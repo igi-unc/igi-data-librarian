@@ -54,10 +54,9 @@ only in Claude mode.
 
 These features are off unless the instance file turns them on; `instances/igi.toml` uses all three.
 
-- **`[privacy] protect_phi = true`**: file names, paths, sample IDs and dataset IDs are shown
-  only to the user who asked (in forms or a direct message from the bot). Channels get counts
-  and channel-safe labels: LIMS number, participant ID, RAFT project ID. `/igi-status` posts
-  counts in the channel and DMs the file names to the requester.
+- **`[privacy] protect_phi = true`**: sample IDs and dataset IDs are shown only to the user
+  who asked (in forms or a direct message from the bot). Channels get file names, counts and
+  channel-safe labels: LIMS number, participant ID, RAFT project ID. File names carry no PHI.
 - **`[permissions] approvers`**: Slack user IDs allowed to write to the LIMS and launch RAFT runs.
 - **`[lims]`**: catalog accessioned data into a LIMS. There is **no LIMS search from Slack**.
   When a user enters a sample ID or LIMS number in the accession form, the bot checks that one
@@ -72,6 +71,17 @@ These features are off unless the instance file turns them on; `instances/igi.to
   you a **Launch** button. Launch submits `raft run` with `sbatch`; the bot checks the job every
   `poll_seconds` and reports when it finishes. Workflows are listed as `[[raft.workflows]]`;
   each needs a RAFT `version` and `enabled = true`. Logs: `<workspace>/bot-logs/`.
+- **Automatic runs (`auto_run = true` on a workflow)**: every newly accessioned, compatible
+  dataset joins one RAFT project per patient, `<prefix>-<workflow>-<participant>` (e.g.
+  `igi-qc-p101`). The first new sample starts a timer (`auto_delay_minutes`, default 15);
+  samples accessioned before it ends join the same run, and the timer is not extended. When
+  it ends, the bot rewrites the project's manifest with all of the patient's samples, runs
+  `raft check-manifest`, and submits one `sbatch` job: `raft run --setup-only` the first
+  time, then `raft update-mounts` and `raft run`. RAFT resumes by default, so samples that
+  already finished come from the Nextflow cache and only new ones are processed. Samples
+  accessioned while a run is going get their own timer and go in the next run. Automatic runs
+  need no Launch click; turning `auto_run` on is the approval. The channel gets a message when
+  a sample is queued, when the run starts, and when it ends; requesters also get a DM when it ends.
 
 ---
 

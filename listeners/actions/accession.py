@@ -1,3 +1,4 @@
+import logging
 import uuid
 from logging import Logger
 
@@ -8,6 +9,7 @@ from instance import get_instance
 from lims import LimsError, lims_client
 from listeners.accession_state import PROPOSALS, SESSIONS
 from listeners.views.accession_builder import build_accession_modal
+from pipelines.jobs import queue_automatic_runs
 from listeners.views.reference_accession_builder import build_reference_accession_modal
 from registry import RegistryService
 
@@ -65,6 +67,8 @@ def _commit(body: dict, client: WebClient) -> dict:
         )
         accession_id = proposal["row"]["uuid"]
         proposal["lims_outcome"] = _write_back(proposal, internal_id, user_id, service)
+        proposal["auto_runs"] = _queue_automatic_runs(internal_id, proposal, user_id)
+    auto_runs = proposal.get("auto_runs") or []
     if proposal.get("channel_id"):
         protect = get_instance().protect_phi and proposal.get("kind") != "reference"
         # Dataset IDs can embed sample identifiers; with protect_phi the channel gets safe labels only.
@@ -76,9 +80,19 @@ def _commit(body: dict, client: WebClient) -> dict:
                 + (f" Requested {len(proposal.get('workflow_ids', []))} analysis workflow(s)." if proposal.get("workflow_ids") else "")
                 + (f" Recorded {len(proposal.get('provided_hla_calls', []))} known HLA allele(s)." if proposal.get("provided_hla_calls") else "")
                 + (f" {proposal['lims_outcome']}" if proposal.get("lims_outcome") else "")
+                + "".join(f"\n{line}" for line in auto_runs)
             ),
         )
     return proposal
+
+
+def _queue_automatic_runs(internal_id: str, proposal: dict, user_id: str) -> list[str]:
+    """Queue automatic RAFT runs (e.g. QC); a failure here never undoes the accession."""
+    try:
+        return queue_automatic_runs(internal_id, proposal["user_id"], proposal.get("channel_id", ""))
+    except Exception as exc:
+        logging.getLogger(__name__).exception("Could not queue automatic RAFT runs")
+        return [f":warning: Automatic RAFT runs were not queued: {exc}"]
 
 
 def handle_accession_approve(ack: Ack, body: dict, client: WebClient, logger: Logger):
@@ -90,7 +104,8 @@ def handle_accession_approve(ack: Ack, body: dict, client: WebClient, logger: Lo
             view=_message_view(
                 "Accession complete",
                 f":white_check_mark: Accessioned `{proposal['row'].get('uuid') or proposal['row']['reference_id']}` with {len(proposal['files'])} file(s)."
-                + (f"\n{proposal['lims_outcome']}" if proposal.get("lims_outcome") else ""),
+                + (f"\n{proposal['lims_outcome']}" if proposal.get("lims_outcome") else "")
+                + "".join(f"\n{line}" for line in proposal.get("auto_runs") or []),
             ),
         )
     except Exception as exc:

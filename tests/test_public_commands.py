@@ -30,13 +30,10 @@ def test_status_responds_in_channel(monkeypatch):
     client.chat_postMessage.assert_not_called()
 
 
-def test_status_keeps_file_names_out_of_channels_when_protecting_phi(monkeypatch, test_instance):
+def test_status_lists_file_names_in_channel_even_when_protecting_phi(monkeypatch, test_instance):
     test_instance.write_text(test_instance.read_text() + "\n[privacy]\nprotect_phi = true\n")
     instance_config.clear_cache()
     respond, client = _run(monkeypatch)
-    channel_text = str(respond.call_args.kwargs["blocks"])
     assert respond.call_args.kwargs["response_type"] == "in_channel"
-    assert "UNC316" not in channel_text and "Unregistered" in channel_text
-    dm = client.chat_postMessage.call_args.kwargs
-    assert dm["channel"] == "U1"
-    assert "IGI-MP-P101-UNC316_R1.fastq.gz" in str(dm["blocks"])
+    assert "IGI-MP-P101-UNC316_R1.fastq.gz" in str(respond.call_args.kwargs["blocks"])
+    client.chat_postMessage.assert_not_called()

@@ -27,8 +27,9 @@ id_fields = [
 source = []
 
 [privacy]
-# File names, paths, sample IDs and dataset IDs are shown only to the requesting user
-# (forms and direct messages). Channels get counts, LIMS numbers, participant IDs and RAFT project IDs.
+# Sample IDs and dataset IDs are shown only to the requesting user (forms and direct
+# messages). Channels get file names (no PHI), counts, LIMS numbers, participant IDs and
+# RAFT project IDs.
 protect_phi = true
 
 [permissions]
@@ -58,12 +59,18 @@ poll_seconds = 300
 
 [[raft.workflows]]
 id = "qc"
-name = "Sequencing QC"
-workflow = "qc"
-version = ""                   # set when the RAFT qc workflow is released
+name = "Quick QC"
+workflow = "qc"                # RAFT qc, human/multi (the quick-qc module)
+version = "1.0.0-dev"
 species = "human"
-input_data = "fastqs"
-enabled = false                # turn on once RAFT qc is finished (needs a version)
+input_data = "multi"           # FASTQs and BAMs, found by File_Prefix
+workflow_profile = "standard"
+enabled = true
+# Run automatically on every newly accessioned FASTQ/BAM dataset, one RAFT project per patient
+# (igi-qc-<participant>). The first new sample starts the timer; samples accessioned before
+# it ends join the same run. Re-runs reuse finished samples from the Nextflow cache.
+auto_run = true
+auto_delay_minutes = 15
 
 # Chat assistant for DMs and @mentions. It uses Claude only when ANTHROPIC_API_KEY is set
 # in .env; otherwise it replies with the list of slash commands. Defaults shown.

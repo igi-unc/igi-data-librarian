@@ -29,12 +29,21 @@ from typing import Callable
 from instance import InstanceConfig, RaftWorkflow
 from registry import RegistryService
 
+FASTQ_SUFFIXES = (".fastq.gz", ".fq.gz", ".fastq", ".fq")
+BAM_SUFFIXES = (".bam", ".bam.bai", ".bai")
 INPUT_SUFFIXES = {
-    "fastqs": (".fastq.gz", ".fq.gz"),
-    "bams": (".bam", ".bam.bai", ".bai"),
+    "fastqs": FASTQ_SUFFIXES,
+    "bams": BAM_SUFFIXES,
+    "multi": FASTQ_SUFFIXES + BAM_SUFFIXES,  # RAFT finds each by File_Prefix under fastqs/ and bams/
 }
-MANIFEST_COLUMNS = ["Patient_Name", "Run_Name", "Dataset", "File_Prefix", "Sequencing_Method", "Normal"]
+# The LENS v2 manifest; RAFT qc checks Platform/Read_Type against the data.
+MANIFEST_COLUMNS = ["Patient_Name", "Run_Name", "Dataset", "File_Prefix", "Sequencing_Method", "Normal",
+                    "Group", "Platform", "Read_Type", "Sample_Type"]
 SEQUENCING_METHODS = {"wgs": "WGS", "wes": "WES", "poly-a": "RNA-Seq"}
+PLATFORMS = {"illumina": ("Illumina", "short-read"), "ont": ("ONT", "long-read"),
+             "pacbio": ("PacBio", "long-read"), "10x-ont": ("ONT", "long-read")}
+SAMPLE_TYPES = {"tumor": "tumor", "normal-blood": "blood-normal", "normal-tissue": "tissue-normal",
+                "cell-line": "cell-line"}
 ACTIVE_SLURM_STATES = {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING", "SUSPENDED", "REQUEUED", "RESIZING"}
 
 Runner = Callable[..., subprocess.CompletedProcess]
@@ -65,7 +74,20 @@ def project_id_for(instance: InstanceConfig, workflow: RaftWorkflow, run_id: str
     return f"{instance.id_prefix}-{_token(workflow.id)}-{run_id.replace('-', '')[:8]}".lower()
 
 
-def manifest_row(dataset: dict, project_id: str) -> dict[str, str]:
+def run_name_for(dataset: dict) -> str:
+    """RAFT Run_Name (also the FASTQ File_Prefix): a|n (tumor/normal), d|r (DNA/RNA), LIMS number."""
+    row = dataset["row"]
+    normal = (row.get("sample_type") or "").startswith("normal")
+    short = row.get("lims_number") or dataset["internal_id"].replace("-", "")[:8]
+    return f"{'n' if normal else 'a'}{'r' if row.get('analyte') == 'rna' else 'd'}-{_token(short)}"
+
+
+def patient_of(dataset: dict) -> str:
+    row = dataset["row"]
+    return _token(row.get("source") or row.get("lims_number") or dataset["internal_id"][:8])
+
+
+def manifest_row(dataset: dict, project_id: str, run_name: str | None = None) -> dict[str, str]:
     """Build the RAFT manifest row for one registered dataset."""
     row = dataset["row"]
     normal = (row.get("sample_type") or "").startswith("normal")
@@ -74,16 +96,18 @@ def manifest_row(dataset: dict, project_id: str) -> dict[str, str]:
     method = "RNA-Seq" if analyte == "rna" else SEQUENCING_METHODS.get(library, "")
     if not method:
         raise RaftError("Set the dataset's library type (wgs, wes or poly-a) or analyte before running RAFT.")
-    short = row.get("lims_number") or dataset["internal_id"].replace("-", "")[:8]
-    run_name = f"{'n' if normal else 'a'}{'r' if analyte == 'rna' else 'd'}-{_token(short)}"
-    patient = _token(row.get("source") or row.get("lims_number") or dataset["internal_id"][:8])
+    run_name = run_name or run_name_for(dataset)
     return {
-        "Patient_Name": patient,
+        "Patient_Name": patient_of(dataset),
         "Run_Name": run_name,
         "Dataset": project_id,
         "File_Prefix": run_name,
         "Sequencing_Method": method,
         "Normal": "TRUE" if normal else "FALSE",
+        "Group": "",
+        "Platform": PLATFORMS.get(row.get("platform") or "", ("", ""))[0],
+        "Read_Type": PLATFORMS.get(row.get("platform") or "", ("", ""))[1],
+        "Sample_Type": SAMPLE_TYPES.get(row.get("sample_type") or "", row.get("sample_type") or ""),
     }
 
 
@@ -92,7 +116,7 @@ def input_files(dataset: dict, input_data: str) -> list[Path]:
     files = [Path(path) for path in dataset["files"] if path.lower().endswith(suffixes)]
     primary = [path for path in files if not path.name.lower().endswith((".bai",))]
     if not primary:
-        kind = "FASTQ (.fastq.gz/.fq.gz)" if input_data == "fastqs" else "BAM"
+        kind = {"fastqs": "FASTQ", "bams": "BAM"}.get(input_data, "FASTQ or BAM")
         raise RaftError(f"This dataset has no registered {kind} files.")
     missing = [path for path in files if not path.exists()]
     if missing:
@@ -140,19 +164,20 @@ class RaftRunner:
         return result
 
     # -- requests ----------------------------------------------------------------------
+    @staticmethod
+    def compatible(workflow: RaftWorkflow, dataset: dict) -> bool:
+        """Whether a workflow can run on a dataset (analyte, library type and input files)."""
+        row = dataset["row"]
+        if workflow.compatible_analytes and row.get("analyte") not in workflow.compatible_analytes:
+            return False
+        if workflow.compatible_library_types and row.get("library_type") not in workflow.compatible_library_types:
+            return False
+        suffixes = INPUT_SUFFIXES[workflow.input_data]
+        return any(path.lower().endswith(suffixes) for path in dataset["files"])
+
     def eligible_datasets(self, workflow: RaftWorkflow) -> list[dict]:
         """Registered datasets this workflow can run on (input type and compatibility)."""
-        result = []
-        for dataset in self.registry.datasets():
-            row = dataset["row"]
-            if workflow.compatible_analytes and row.get("analyte") not in workflow.compatible_analytes:
-                continue
-            if workflow.compatible_library_types and row.get("library_type") not in workflow.compatible_library_types:
-                continue
-            suffixes = INPUT_SUFFIXES[workflow.input_data]
-            if any(path.lower().endswith(suffixes) for path in dataset["files"]):
-                result.append(dataset)
-        return result
+        return [dataset for dataset in self.registry.datasets() if self.compatible(workflow, dataset)]
 
     def request(self, workflow_key: str, dataset_internal_id: str, user_id: str, channel_id: str) -> tuple[str, str]:
         """Record a run request. Returns (run_id, project_id)."""
@@ -208,12 +233,18 @@ class RaftRunner:
         return {"project_id": project_id, "workflow": workflow, "staged_files": len(staged),
                 "manifest": str(manifest), "dataset": dataset}
 
+    def staging_dir(self, project_id: str, input_data: str, source: Path) -> Path:
+        """inputs/fastqs/<project> or inputs/bams/<project> (multi puts each file by its type)."""
+        if input_data == "multi":
+            input_data = "bams" if source.name.lower().endswith(BAM_SUFFIXES) else "fastqs"
+        return self.workspace / "inputs" / input_data / project_id
+
     def _stage(self, project_id: str, input_data: str, prefix: str, files: list[Path]) -> list[Path]:
-        """Symlink registered inputs as <inputs>/<project>/<File_Prefix>_<original name>."""
-        target_dir = self.workspace / "inputs" / input_data / project_id
-        target_dir.mkdir(parents=True, exist_ok=True)
+        """Symlink registered inputs as <inputs>/<fastqs|bams>/<project>/<File_Prefix>_<original name>."""
         links = []
         for source in files:
+            target_dir = self.staging_dir(project_id, input_data, source)
+            target_dir.mkdir(parents=True, exist_ok=True)
             link = target_dir / f"{prefix}_{source.name}"
             if link.is_symlink() or link.exists():
                 if link.is_symlink() and Path(os.readlink(link)) == source.resolve():
@@ -232,30 +263,53 @@ class RaftRunner:
         if run["status"] != "ready":
             raise RaftError(f"This run is {run['status']}, not ready to launch.")
         project_id = run["parameters"]["project_id"]
-        command = [self.config.executable, "run", "--project-id", project_id]
-        if self.config.nextflow_profile:
-            command += ["--profile", self.config.nextflow_profile]
         log = self._log_path(project_id, "run")
-        if self.config.launcher == "sbatch":
-            sbatch = ["sbatch", "--parsable", "--job-name", project_id, "--output", str(log),
-                      "--chdir", str(self.workspace), *self.config.sbatch_args, "--wrap", shlex.join(command)]
-            result = self._run(sbatch, cwd=self.workspace, capture_output=True, text=True, timeout=60, check=False)
-            if result.returncode != 0:
-                raise RaftError(f"sbatch failed (exit {result.returncode}): {(result.stderr or '').strip()[:300]}")
-            job_id = f"slurm:{result.stdout.strip().split(';')[0]}"
-        else:
-            with log.open("a", encoding="utf-8") as handle:
-                process = subprocess.Popen(
-                    command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=handle,
-                    stderr=subprocess.STDOUT, start_new_session=True,
-                )
-            job_id = f"pid:{process.pid}"
+        job_id = self.submit(project_id, shlex.join(self.run_command(project_id)), log)
         parameters = {**run["parameters"], "approved_by": approved_by, "run_log": str(log)}
         self.registry.update_workflow_run(run_id, "running", scheduler_job_id=job_id, parameters_json=parameters)
         self.registry.record_event("workflow_launched", run["dataset_internal_id"],
                                    {"run_id": run_id, "project_id": project_id, "job": job_id,
                                     "approved_by": approved_by})
         return job_id
+
+    def run_command(self, project_id: str) -> list[str]:
+        """`raft run` for an existing project; Nextflow resumes from its cache by default."""
+        command = [self.config.executable, "run", "--project-id", project_id]
+        if self.config.nextflow_profile:
+            command += ["--profile", self.config.nextflow_profile]
+        return command
+
+    def submit(self, project_id: str, script: str, log: Path) -> str:
+        """Start a shell script as a Slurm job (or detached process). Returns the job ID."""
+        if self.config.launcher == "sbatch":
+            sbatch = ["sbatch", "--parsable", "--job-name", project_id, "--output", str(log),
+                      "--chdir", str(self.workspace), *self.config.sbatch_args, "--wrap", script]
+            result = self._run(sbatch, cwd=self.workspace, capture_output=True, text=True, timeout=60, check=False)
+            if result.returncode != 0:
+                raise RaftError(f"sbatch failed (exit {result.returncode}): {(result.stderr or '').strip()[:300]}")
+            return f"slurm:{result.stdout.strip().split(';')[0]}"
+        with log.open("a", encoding="utf-8") as handle:
+            process = subprocess.Popen(
+                ["/bin/sh", "-c", script], cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=handle,
+                stderr=subprocess.STDOUT, start_new_session=True,
+            )
+        return f"pid:{process.pid}"
+
+    def outcome(self, job_id: str, project_id: str) -> tuple[str, str] | None:
+        """None while the job is active; otherwise (completed|failed, detail)."""
+        active, scheduler_state = self._job_state(job_id or "")
+        if active:
+            return None
+        state = self.project_state(project_id)
+        label = state.get("label") or "no RAFT status"
+        if state.get("id") == "run_failed" or scheduler_state in {"FAILED", "CANCELLED", "TIMEOUT",
+                                                                  "OUT_OF_MEMORY", "NODE_FAIL"}:
+            status = "failed"
+        elif state.get("id") in {"reports_available", "run_started_no_reports"} or scheduler_state == "COMPLETED":
+            status = "completed"
+        else:
+            status = "failed"
+        return status, f"{label}; scheduler: {scheduler_state}"
 
     def cancel(self, run_id: str, user_id: str) -> None:
         run = self.registry.workflow_run(run_id)
@@ -302,20 +356,14 @@ class RaftRunner:
             if run.get("analysis_type") != "raft" or run["status"] != "running":
                 continue
             parameters = json.loads(run["parameters_json"] or "{}")
+            if parameters.get("auto"):
+                continue  # per-patient projects are polled by pipelines.batches
             project_id = parameters.get("project_id", "")
-            active, scheduler_state = self._job_state(run.get("scheduler_job_id") or "")
-            if active:
+            result = self.outcome(run.get("scheduler_job_id") or "", project_id)
+            if result is None:
                 continue
-            state = self.project_state(project_id)
-            label = state.get("label") or "no RAFT status"
-            if state.get("id") == "run_failed" or scheduler_state in {"FAILED", "CANCELLED", "TIMEOUT",
-                                                                      "OUT_OF_MEMORY", "NODE_FAIL"}:
-                status = "failed"
-            elif state.get("id") in {"reports_available", "run_started_no_reports"} or scheduler_state == "COMPLETED":
-                status = "completed"
-            else:
-                status = "failed"
-            detail = f"{label}; scheduler: {scheduler_state}"
+            status, detail = result
+            state = {"detail": detail}
             self.registry.update_workflow_run(run["run_id"], status,
                                               error_message=None if status == "completed" else detail)
             if status == "completed":
